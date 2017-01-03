@@ -30,7 +30,7 @@ protected:
 	std::recursive_mutex lock_;
 	struct ClassInfo
 	{
-		std::function<void*(void)> pfnCreate;
+		std::function<void*(void**)> pfnCreate;
 		std::function<void(void*)> pfnDestroy;
 	};
 	std::map<std::wstring, std::shared_ptr<ClassInfo>> classes_;
@@ -48,10 +48,11 @@ public:
 		auto info = GetClsInfo(objName);
 		if (info)
 		{
-			return std::shared_ptr<Interface>((Interface*)info->pfnCreate(),
-				[info](Interface* p)
+			void* obj = nullptr;
+			return std::shared_ptr<Interface>(reinterpret_cast<Interface*>(info->pfnCreate(&obj)),
+				[info, obj](Interface*)
 			{
-				info->pfnDestroy(p);
+				info->pfnDestroy(obj);
 			});
 		}
 		return {};
@@ -75,8 +76,9 @@ public:
 		auto info = GetClsInfo(objName);
 		if (info)
 		{
-			auto ret = std::shared_ptr<Interface>((Interface*)info->pfnCreate(),
-				[this,info, objName](Interface* p)
+			void* obj = nullptr;
+			auto ret = std::shared_ptr<Interface>(reinterpret_cast<Interface*>(info->pfnCreate(&obj)),
+				[this, info, objName, obj](Interface*)
 			{
 				// scoped
 				{
@@ -84,7 +86,7 @@ public:
 					singletons_.erase(objName);
 				}
 
-				info->pfnDestroy(p);
+				info->pfnDestroy(obj);
 			});
 
 			std::lock_guard<decltype(lock_)> l(lock_);
@@ -96,7 +98,7 @@ public:
 
 	auto RegisterCls(
 		std::wstring objName, 
-		std::function<void*(void)> pfnCreate, 
+		std::function<void*(void**)> pfnCreate, 
 		std::function<void(void*)> pfnDestroy) -> std::shared_ptr<void>
 	{
 		auto info = std::make_shared<ClassInfo>();
@@ -151,8 +153,11 @@ protected:
 #define REGISTER_OBJECT(objName, interfaceName, className) \
 	static std::shared_ptr<void> objreg_##objName = \
 		ObjBase::getInstance()->RegisterCls(objName,  \
-		[]{return static_cast<interfaceName*>(new className);}, \
-		[](void* p){delete static_cast<interfaceName*>(p);});
+		[](void** obj){ \
+			auto p = new className; \
+			*obj = p; \
+			return static_cast<interfaceName*>(p);}, \
+		[](void* p){delete static_cast<className*>(p);});
 
 // declaration helper
 #define DECLARE_VIRTUAL_GET_OBJECT(interfacename)								\
