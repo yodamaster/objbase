@@ -48,12 +48,11 @@ public:
 		auto info = GetClsInfo(objName);
 		if (info)
 		{
-			void** obj = new (void*);
-			return std::shared_ptr<Interface>(reinterpret_cast<Interface*>(info->pfnCreate(obj)),
+			auto obj = std::make_shared<void*>();
+			return std::shared_ptr<Interface>(reinterpret_cast<Interface*>(info->pfnCreate(obj.get())),
 				[info, obj](Interface*)
 			{
 				info->pfnDestroy(*obj);
-				delete obj;
 			});
 		}
 		return {};
@@ -77,8 +76,8 @@ public:
 		auto info = GetClsInfo(objName);
 		if (info)
 		{
-			void** obj = new (void*);
-			auto ret = std::shared_ptr<Interface>(reinterpret_cast<Interface*>(info->pfnCreate(obj)),
+			auto obj = std::make_shared<void*>();
+			auto ret = std::shared_ptr<Interface>(reinterpret_cast<Interface*>(info->pfnCreate(obj.get())),
 				[this, info, objName, obj](Interface*)
 			{
 				// scoped
@@ -88,7 +87,6 @@ public:
 				}
 
 				info->pfnDestroy(*obj);
-				delete obj;
 			});
 
 			std::lock_guard<decltype(lock_)> l(lock_);
