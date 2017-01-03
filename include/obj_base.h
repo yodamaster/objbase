@@ -48,11 +48,12 @@ public:
 		auto info = GetClsInfo(objName);
 		if (info)
 		{
-			void* obj = nullptr;
-			return std::shared_ptr<Interface>(reinterpret_cast<Interface*>(info->pfnCreate(&obj)),
+			void** obj = new (void*);
+			return std::shared_ptr<Interface>(reinterpret_cast<Interface*>(info->pfnCreate(obj)),
 				[info, obj](Interface*)
 			{
-				info->pfnDestroy(obj);
+				info->pfnDestroy(*obj);
+				delete obj;
 			});
 		}
 		return {};
@@ -76,8 +77,8 @@ public:
 		auto info = GetClsInfo(objName);
 		if (info)
 		{
-			void* obj = nullptr;
-			auto ret = std::shared_ptr<Interface>(reinterpret_cast<Interface*>(info->pfnCreate(&obj)),
+			void** obj = new (void*);
+			auto ret = std::shared_ptr<Interface>(reinterpret_cast<Interface*>(info->pfnCreate(obj)),
 				[this, info, objName, obj](Interface*)
 			{
 				// scoped
@@ -86,7 +87,8 @@ public:
 					singletons_.erase(objName);
 				}
 
-				info->pfnDestroy(obj);
+				info->pfnDestroy(*obj);
+				delete obj;
 			});
 
 			std::lock_guard<decltype(lock_)> l(lock_);
@@ -157,7 +159,9 @@ protected:
 			auto p = new className; \
 			*obj = p; \
 			return static_cast<interfaceName*>(p);}, \
-		[](void* p){delete static_cast<className*>(p);});
+		[](void* p){ \
+			delete reinterpret_cast<className*>(p);} \
+		);
 
 // declaration helper
 #define DECLARE_VIRTUAL_GET_OBJECT(interfacename)								\
