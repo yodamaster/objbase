@@ -30,7 +30,7 @@ protected:
 	std::recursive_mutex lock_;
 	struct ClassInfo
 	{
-		std::function<void*(void**)> pfnCreate;
+		std::function<void*(void)> pfnCreate;
 		std::function<void(void*)> pfnDestroy;
 	};
 	std::map<std::wstring, std::shared_ptr<ClassInfo>> classes_;
@@ -48,11 +48,10 @@ public:
 		auto info = GetClsInfo(objName);
 		if (info)
 		{
-			auto obj = std::make_shared<void*>();
-			return std::shared_ptr<Interface>(reinterpret_cast<Interface*>(info->pfnCreate(obj.get())),
-				[info, obj](Interface*)
+			return std::shared_ptr<Interface>(reinterpret_cast<Interface*>(info->pfnCreate()),
+				[info](Interface* p)
 			{
-				info->pfnDestroy(*obj);
+				info->pfnDestroy(p);
 			});
 		}
 		return {};
@@ -76,9 +75,8 @@ public:
 		auto info = GetClsInfo(objName);
 		if (info)
 		{
-			auto obj = std::make_shared<void*>();
-			auto ret = std::shared_ptr<Interface>(reinterpret_cast<Interface*>(info->pfnCreate(obj.get())),
-				[this, info, objName, obj](Interface*)
+			auto ret = std::shared_ptr<Interface>(reinterpret_cast<Interface*>(info->pfnCreate()),
+				[this, info, objName](Interface* p)
 			{
 				// scoped
 				{
@@ -86,7 +84,7 @@ public:
 					singletons_.erase(objName);
 				}
 
-				info->pfnDestroy(*obj);
+				info->pfnDestroy(p);
 			});
 
 			std::lock_guard<decltype(lock_)> l(lock_);
@@ -98,7 +96,7 @@ public:
 
 	auto RegisterCls(
 		std::wstring objName, 
-		std::function<void*(void**)> pfnCreate, 
+		std::function<void*(void)> pfnCreate, 
 		std::function<void(void*)> pfnDestroy) -> std::shared_ptr<void>
 	{
 		auto info = std::make_shared<ClassInfo>();
@@ -153,12 +151,9 @@ protected:
 #define REGISTER_OBJECT(objName, interfaceName, className) \
 	static std::shared_ptr<void> objreg_##objName = \
 		ObjBase::getInstance()->RegisterCls(objName,  \
-		[](void** obj){ \
-			auto p = new className; \
-			*obj = p; \
-			return static_cast<interfaceName*>(p);}, \
+		[]{ return static_cast<interfaceName*>(new className); }, \
 		[](void* p){ \
-			delete reinterpret_cast<className*>(p);} \
+			delete static_cast<className*>(reinterpret_cast<interfaceName*>(p)); } \
 		);
 
 // declaration helper
